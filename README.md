@@ -70,29 +70,6 @@ pipeline = CodePipeline(pipeline_config)
 result = pipeline.run()
 ```
 
-## Project Structure
-
-```
-danglang/
-├── __init__.py
-├── agents/
-│   ├── __init__.py
-│   ├── base.py
-│   ├── python_architect.py
-│   ├── python_coder.py
-│   ├── code_reviewer.py
-│   └── code_double_checker.py
-├── tools/
-│   ├── __init__.py
-│   ├── web_search.py
-│   ├── doc_finder.py
-│   ├── code_editor.py
-│   ├── lint_runner.py
-│   └── unit_test_runner.py
-├── pipeline.py
-└── config.py
-```
-
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
