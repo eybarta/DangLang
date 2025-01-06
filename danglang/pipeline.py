@@ -1,21 +1,35 @@
 from typing import Dict, Any
+from langchain_community.chat_models import ChatOpenAI
 from langchain.agents import AgentExecutor
-from langchain.chains import LLMChain
-from langchain.chat_models import ChatOpenAI
+from langchain_core.memory import BaseMemory
+from langchain_core.prompts import MessagesPlaceholder
 from langchain.memory import ConversationBufferMemory
 from .config import PipelineConfig
+from .agents import (
+    PythonArchitectAgent,
+    PythonCoderAgent,
+    CodeReviewerAgent,
+    CodeDoubleCheckerAgent
+)
 
 class CodePipeline:
     def __init__(self, config: Dict[str, Any]):
         self.config = PipelineConfig(**config)
-        self.memory = ConversationBufferMemory()
+        # Initialize memory with new kwargs format
+        self.memory = ConversationBufferMemory(
+            memory_key="chat_history",
+            return_messages=True
+        )
         self._initialize_agents()
 
     def _initialize_agents(self):
         """Initialize agent registry with available agent types"""
-        self.agent_registry = {}
-        # Agents will be dynamically imported and initialized here
-        # This will be populated when we implement the specific agents
+        self.agent_registry = {
+            'python_architect': PythonArchitectAgent,
+            'python_coder': PythonCoderAgent,
+            'code_reviewer': CodeReviewerAgent,
+            'code_double_checker': CodeDoubleCheckerAgent
+        }
 
     def _create_agent_executor(self, agent_config: Dict[str, Any]) -> AgentExecutor:
         """Create an agent executor for the given agent configuration"""
@@ -23,7 +37,11 @@ class CodePipeline:
             raise ValueError(f"Unknown agent type: {agent_config['type']}")
         
         agent_class = self.agent_registry[agent_config['type']]
-        llm = ChatOpenAI(model=agent_config['model'])
+        llm = ChatOpenAI(
+            model_name=agent_config['model'],
+            temperature=0.7,
+            model_kwargs={"top_p": 0.9}
+        )
         
         agent = agent_class(
             llm=llm,
@@ -35,7 +53,9 @@ class CodePipeline:
             agent=agent,
             tools=agent.get_tools(),
             memory=self.memory,
-            verbose=True
+            verbose=True,
+            handle_parsing_errors=True,
+            max_iterations=3
         )
 
     def _execute_step(self, step_config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
@@ -53,15 +73,18 @@ class CodePipeline:
         while current_iteration < max_iterations:
             for agent_config in step_config['agents']:
                 agent_executor = self._create_agent_executor(agent_config)
-                result = agent_executor.run(
-                    input={
-                        'goal': self.config.goal,
-                        'context': self.config.context,
-                        'current_state': result
-                    }
+                result.update(
+                    agent_executor.invoke(
+                        {
+                            'input': {
+                                'goal': self.config.goal,
+                                'context': self.config.context,
+                                'current_state': result
+                            }
+                        }
+                    )
                 )
                 
-                # Check if we need another iteration
                 if not result.get('needs_iteration', False):
                     return result
             
@@ -74,13 +97,16 @@ class CodePipeline:
         result = context
         for agent_config in step_config['agents']:
             agent_executor = self._create_agent_executor(agent_config)
-            result = agent_executor.run(
-                input={
-                    'goal': self.config.goal,
-                    'context': self.config.context,
-                    'current_state': result
+            step_result = agent_executor.invoke(
+                {
+                    'input': {
+                        'goal': self.config.goal,
+                        'context': self.config.context,
+                        'current_state': result
+                    }
                 }
             )
+            result.update(step_result)
         return result
 
     def run(self) -> Dict[str, Any]:
