@@ -1,10 +1,10 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 from abc import ABC, abstractmethod
-from langchain_core.agents import Agent, AgentAction, AgentFinish
+from langchain.agents import Agent
+from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.tools import BaseTool
 from langchain_core.callbacks import CallbackManagerForToolRun
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import BaseMessage
 
 class BaseAgent(Agent, ABC):
     """Base agent class that all specialized agents should inherit from"""
@@ -73,7 +73,7 @@ class BaseAgent(Agent, ABC):
         **kwargs: Any,
     ) -> Union[AgentAction, AgentFinish]:
         """Plan the next action based on intermediate steps"""
-        # This method should be implemented by specific agents if needed
+        # This method should be implemented by specific agents
         return AgentFinish(
             return_values={"output": "Task completed"},
             log="Agent has finished its execution",
