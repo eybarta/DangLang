@@ -1,11 +1,11 @@
-from typing import List, Dict, Any
-from langchain.tools import BaseTool
+from typing import List, Dict, Any, Union
+from langchain_core.agents import AgentAction, AgentFinish
+from langchain_core.tools import BaseTool
+from langchain_core.callbacks import CallbackManagerForToolRun
 from .base import BaseAgent
 from ..tools import LintRunnerTool
 
 class CodeReviewerAgent(BaseAgent):
-    """Agent specialized in reviewing Python code"""
-
     def get_tools(self) -> List[BaseTool]:
         """Get tools for code review"""
         tools = []
@@ -13,58 +13,32 @@ class CodeReviewerAgent(BaseAgent):
             tools.append(LintRunnerTool())
         return tools
 
-    def plan(self, goal: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Plan the code review process"""
-        code = context.get('code', {})
-        
-        plan = [
-            {
-                'step': 'lint_check',
-                'description': 'Run linting checks on the code'
+    def plan_agent_actions(
+        self,
+        intermediate_steps: List[tuple[AgentAction, str]],
+        callbacks: CallbackManagerForToolRun = None,
+        **kwargs: Any,
+    ) -> Union[AgentAction, AgentFinish]:
+        """Plan the next action for the reviewer agent"""
+        input_data = kwargs.get('input', {})
+        current_state = input_data.get('current_state', {})
+        code = current_state.get('code', {}).get('optimized', '')
+
+        if not intermediate_steps:
+            # First step: Run linting
+            return AgentAction(
+                tool='lint_runner',
+                tool_input=code,
+                log="Running code linting checks"
+            )
+
+        # After linting, provide review
+        lint_results = intermediate_steps[-1][1]
+        return AgentFinish(
+            return_values={
+                'review_comments': ['Linting feedback based on results'],
+                'style_issues': [],
+                'needs_changes': bool(lint_results.get('errors') or lint_results.get('warnings'))
             },
-            {
-                'step': 'review_style',
-                'description': 'Review code style and formatting'
-            },
-            {
-                'step': 'review_patterns',
-                'description': 'Review design patterns and best practices'
-            },
-            {
-                'step': 'review_documentation',
-                'description': 'Review code documentation'
-            }
-        ]
-
-        return plan
-
-    def execute(self, plan: List[Dict[str, Any]], context: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute the code review plan"""
-        result = {
-            'review_comments': [],
-            'lint_results': None,
-            'style_issues': [],
-            'needs_changes': False
-        }
-
-        code = context.get('code', {}).get('optimized', '')
-        lint_runner = next((tool for tool in self.get_tools() 
-                          if isinstance(tool, LintRunnerTool)), None)
-
-        for step in plan:
-            if step['step'] == 'lint_check':
-                if lint_runner:
-                    result['lint_results'] = lint_runner._run(code)
-                    if result['lint_results']:
-                        result['needs_changes'] = True
-            elif step['step'] == 'review_style':
-                # TODO: Implement style review
-                pass
-            elif step['step'] == 'review_patterns':
-                # TODO: Implement pattern review
-                pass
-            elif step['step'] == 'review_documentation':
-                # TODO: Implement documentation review
-                pass
-
-        return result
+            log="Completed code review"
+        )

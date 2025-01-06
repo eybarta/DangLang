@@ -1,11 +1,11 @@
-from typing import List, Dict, Any
-from langchain.tools import BaseTool
+from typing import List, Dict, Any, Union
+from langchain_core.agents import AgentAction, AgentFinish
+from langchain_core.tools import BaseTool
+from langchain_core.callbacks import CallbackManagerForToolRun
 from .base import BaseAgent
 from ..tools import DocFinderTool, CodeEditorTool
 
 class PythonCoderAgent(BaseAgent):
-    """Agent specialized in writing Python code"""
-
     def get_tools(self) -> List[BaseTool]:
         """Get tools for code writing"""
         tools = []
@@ -15,67 +15,43 @@ class PythonCoderAgent(BaseAgent):
             tools.append(CodeEditorTool())
         return tools
 
-    def plan(self, goal: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Plan the code implementation"""
-        architecture = context.get('architecture', {})
-        design_patterns = context.get('design_patterns', [])
+    def plan_agent_actions(
+        self,
+        intermediate_steps: List[tuple[AgentAction, str]],
+        callbacks: CallbackManagerForToolRun = None,
+        **kwargs: Any,
+    ) -> Union[AgentAction, AgentFinish]:
+        """Plan the next action for the coder agent"""
+        input_data = kwargs.get('input', {})
+        goal = input_data.get('goal', '')
+        context = input_data.get('context', '')
+        current_state = input_data.get('current_state', {})
 
-        plan = [
-            {
-                'step': 'setup_structure',
-                'description': 'Set up the code structure based on architecture'
+        if not intermediate_steps:
+            # First step: Look up documentation
+            return AgentAction(
+                tool='doc_finder',
+                tool_input=goal,
+                log=f"Looking up documentation for {goal}"
+            )
+
+        if len(intermediate_steps) == 1:
+            # Second step: Write initial code
+            docs = intermediate_steps[0][1]
+            return AgentAction(
+                tool='code_editor',
+                tool_input={'code': '# TODO: Initial implementation', 'action': 'create'},
+                log="Writing initial code implementation"
+            )
+
+        # Final step: Return the code
+        return AgentFinish(
+            return_values={
+                'code': {
+                    'optimized': intermediate_steps[-1][1],
+                    'documentation': '# Code documentation'
+                },
+                'needs_review': True
             },
-            {
-                'step': 'implement_core',
-                'description': 'Implement core functionality'
-            },
-            {
-                'step': 'add_documentation',
-                'description': 'Add code documentation and type hints'
-            },
-            {
-                'step': 'optimize_code',
-                'description': 'Optimize code for performance and readability'
-            }
-        ]
-
-        return plan
-
-    def execute(self, plan: List[Dict[str, Any]], context: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute the code writing plan"""
-        result = {
-            'code': {},
-            'documentation': '',
-            'needs_review': True
-        }
-
-        code_editor = next((tool for tool in self.get_tools() 
-                          if isinstance(tool, CodeEditorTool)), None)
-
-        for step in plan:
-            if step['step'] == 'setup_structure':
-                if code_editor:
-                    result['code']['structure'] = code_editor._run(
-                        code='# TODO: Initial structure',
-                        action='create'
-                    )
-            elif step['step'] == 'implement_core':
-                if code_editor:
-                    result['code']['core'] = code_editor._run(
-                        code='# TODO: Core implementation',
-                        action='implement'
-                    )
-            elif step['step'] == 'add_documentation':
-                if code_editor:
-                    result['documentation'] = code_editor._run(
-                        code=result['code'].get('core', ''),
-                        action='document'
-                    )
-            elif step['step'] == 'optimize_code':
-                if code_editor:
-                    result['code']['optimized'] = code_editor._run(
-                        code=result['code'].get('core', ''),
-                        action='optimize'
-                    )
-
-        return result
+            log="Completed code writing"
+        )
