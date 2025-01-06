@@ -1,7 +1,7 @@
 import os
 import aiohttp
 import requests
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, ClassVar
 from dotenv import load_dotenv
 from langchain_core.tools import BaseTool
 from langchain_core.callbacks import CallbackManagerForToolRun
@@ -14,8 +14,8 @@ BRAVE_SEARCH_URL = 'https://api.search.brave.com/res/v1/web/search'
 class WebSearchTool(BaseTool):
     """Tool for performing web searches using Brave Search API"""
     
-    name = "web_search"
-    description = "Search the web for information about programming, best practices, and documentation"
+    name: ClassVar[str] = "web_search"
+    description: ClassVar[str] = "Search the web for information about programming, best practices, and documentation"
 
     def _process_results(self, response_data: Dict[str, Any]) -> str:
         """Process the Brave Search API results into a readable format
